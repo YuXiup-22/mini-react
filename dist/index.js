@@ -43,7 +43,8 @@ function render(element,container){
  */
 function workLoop(deadline) {
     //  在调度机制函数里面，去执行reconcile过程，
-    performUnitOfWork(nextunitOfWork)
+    // 执行完一个任务后，拿到下一个需要执行的任务，等待调度机制进行
+    nextunitOfWork = performUnitOfWork(nextunitOfWork)
 }
 requestIdleCallback(workLoop)
 
@@ -55,16 +56,34 @@ requestIdleCallback(workLoop)
 function performUnitOfWork(fiber) {
     //判断是函数组件还是原生标签,因为函数组件需要传入props去执行，拿到返回的结果
     const isFunctionComponent = fiber.type instanceof Function
+    // 此时渲染App函数组件，
     if (isFunctionComponent) {
         updateFunctionComponent(fiber)
     } else {
+        // 初始化时，会从这里进入
         updateHostComponent(fiber)
+    }
+    // 创建完root根节点后，reconcile App返回内容
+    if(fiber.child){
+        return fiber.child
+    }
+    // 走到叶子节点后，需要继续兄弟元素或者返回到父元素
+    let nextFiber = fiber
+    while(nextFiber){
+        if(nextFiber.sibling){
+            return nextFiber.sibling
+        }
+        nextFiber = nextFiber.return
     }
 }
 function updateFunctionComonent(fiber) {
-    // 这里标记为children，是因为
-    const res = [fiber.type(fiber.props)]
-    reconcileChildren(fiber,res)
+    // 函数组件需要执行，返回需要继续reconcile的内容，即child,
+    // 这里要说明以下，渲染的时候是根据真实的dom层级，所以
+    // <app><p></p></app>中<p>都不是渲染时的child,因为app函数组件
+    // 中返回的内容才是真实child，其实也就是app本身，不过这里以真实渲染dom为准
+    // 所以认为是child
+    const children = [fiber.type(fiber.props)]
+    reconcileChildren(fiber,children)
 }
 function updateHostComponent(fiber) {
     reconcileChildren(fiber,fiber.props.children)
@@ -72,5 +91,28 @@ function updateHostComponent(fiber) {
 // elements就是vdom里的children,函数组件里返回的也是vdom里面，只不过在执行函数的时候
 //才执行createElement,返回vdom
 function reconcileChildren(wipFiber,elements) {
+    // 初次渲染时，同时也是第一个child
+    let index = 0
+    // 进入到app入口函数本身渲染时，就可能出现多个children即elements
+    let prevSibling = null
+    while(index<elements.length){ //初次渲染elements的个数是1
+        let element = elements[index]
+        newFiber = {
+            type: element.type,
+            props: element.props,
+            dom: null,
+            return: wipFiber, //child对象添加return指针构造fiber对象
+            alternate: null, 
+        }
+        if(index === 0){
+            wipFiber.child = newFiber //顶端fiber构造child指针
+        }else if(element){ //这里这个element存在判断是？
+            prevSibling.sibling = newFiber
+        }
+        // reconcile任何一个节点时，都把自己当作上一个sibling,
+        // 默认会有兄弟元素，等待有兄弟元素时，记录下来
+        prevSibling = newFiber
+        index++
+    }
     
 }
