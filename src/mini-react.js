@@ -137,4 +137,72 @@ function updateDom(dom, prevProps, nextProps) {
     .forEach((name) => {
       dom[name] = "";
     });
+  // Set new or changed properties
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      dom[name] = nextProps[name];
+    });
+
+  // Add event listeners
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.addEventListener(eventType, nextProps[name]);
+    });
 }
+function reconcileChildren(wipFiber, elements) {
+  let index = 0
+  let oldFiber = wipFiber.alternate?.child
+  let prevSibling = null
+
+  while ( index < elements.length || oldFiber != null) {
+      const element = elements[index]
+      let newFiber = null
+
+      const sameType = element?.type == oldFiber?.type
+
+      if (sameType) {
+          newFiber = {
+              type: oldFiber.type,
+              props: element.props,
+              dom: oldFiber.dom,
+              return: wipFiber,
+              alternate: oldFiber,
+              effectTag: "UPDATE",
+          }
+      }
+      if (element && !sameType) {
+          newFiber = {
+              type: element.type,
+              props: element.props,
+              dom: null,
+              return: wipFiber,
+              alternate: null,
+              effectTag: "PLACEMENT",
+          }
+      }
+      if (oldFiber && !sameType) {
+          oldFiber.effectTag = "DELETION"
+          deletions.push(oldFiber)
+      }
+
+      if (oldFiber) {
+          oldFiber = oldFiber.sibling
+      }
+
+      if (index === 0) {
+          wipFiber.child = newFiber
+      } else if (element) {
+          prevSibling.sibling = newFiber
+      }
+
+      prevSibling = newFiber
+      index++
+  }
+}
+
+// useState和useEffect实现
